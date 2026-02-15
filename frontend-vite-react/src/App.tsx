@@ -115,7 +115,7 @@ function App() {
 
       // Connect to the wallet with network ID
       const connectedAPI = await initialAPI.connect('undeployed')
-      
+      const contractcall = await contract.calltxn.submitReport();
       if (!connectedAPI) {
         setMessage('Failed to connect to wallet. Connection was rejected.')
         return
@@ -166,7 +166,7 @@ function App() {
       
       // Call the real contract through the Midnight network
       const result = await wallet.contractService.submitReport()
-      
+      const result = await wallet.
       if (!result.success) {
         throw new Error(result.error || 'Failed to submit report')
       }
