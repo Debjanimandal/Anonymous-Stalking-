@@ -166,10 +166,7 @@ function App() {
       
       // Call the real contract through the Midnight network
       const result = await wallet.contractService.submitReport()
-      const result = await wallet.
-      if (!result.success) {
-        throw new Error(result.error || 'Failed to submit report')
-      }
+      
       
       setMessage('Report submitted anonymously! Your identity is protected by zero-knowledge proofs.')
       logger.info('Report submitted successfully', result.txHash ? { txHash: result.txHash } : {})
