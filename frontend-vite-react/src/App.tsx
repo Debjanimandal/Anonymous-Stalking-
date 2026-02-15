@@ -4,6 +4,7 @@ import { setNetworkId } from '@midnight-ntwrk/midnight-js-network-id'
 import * as pino from 'pino'
 import { Lock, BarChart3, Zap, CheckCircle2, AlertTriangle } from 'lucide-react'
 import LiquidEther from './components/LiquidEther'
+import { createContractService, type ContractService } from './services/contractService'
 import './App.css'
 
 // Set network to undeployed (standalone)
@@ -20,6 +21,7 @@ interface WalletState {
   address?: string
   balance?: string
   provider?: any
+  contractService?: ContractService
 }
 
 // Midnight wallet API types
@@ -68,6 +70,20 @@ function App() {
     setTimeout(checkWallet, 1000)
   }, [])
 
+  // Fetch total reports when wallet connects
+  useEffect(() => {
+    if (wallet.isConnected && wallet.contractService) {
+      wallet.contractService.getTotalReports()
+        .then(total => {
+          setTotalReports(Number(total))
+          logger.info('Fetched total reports:', total)
+        })
+        .catch(error => {
+          logger.error('Failed to fetch total reports:', error)
+        })
+    }
+  }, [wallet.isConnected, wallet.contractService])
+
   const connectWallet = async () => {
     try {
       setMessage('Looking for Midnight wallet...')
@@ -104,11 +120,15 @@ function App() {
         setMessage('Failed to connect to wallet. Connection was rejected.')
         return
       }
+
+      // Create contract service for interacting with the deployed contract
+      const contractService = createContractService(connectedAPI, CONTRACT_ADDRESS)
       
       setWallet({
         isConnected: true,
         address: initialAPI.name,
-        provider: connectedAPI
+        provider: connectedAPI,
+        contractService
       })
       
       setMessage('Wallet connected successfully! You can now submit reports.')
@@ -133,7 +153,7 @@ function App() {
   }
 
   const submitReport = async () => {
-    if (!wallet.isConnected || !wallet.provider) {
+    if (!wallet.isConnected || !wallet.contractService) {
       setMessage('Please connect your wallet first')
       return
     }
@@ -144,35 +164,27 @@ function App() {
       
       logger.info('Submitting report to contract:', CONTRACT_ADDRESS)
       
-      // Simulate proof generation
-      await new Promise(resolve => setTimeout(resolve, 2500))
+      // Call the real contract through the Midnight network
+      const result = await wallet.contractService.submitReport()
       
-      setMessage('Requesting wallet signature...')
-      
-      // In a real implementation, this would call the contract's submitReport() function
-      // and the wallet would prompt for signature
-      try {
-        // Simulate wallet signing request
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        
-        setMessage('Submitting to Midnight Network...')
-        await new Promise(resolve => setTimeout(resolve, 1500))
-        
-        setTotalReports(prev => prev + 1)
-        setMessage('Report submitted anonymously! Your identity is protected by zero-knowledge proofs.')
-        
-        logger.info('Report submitted successfully')
-        
-        setTimeout(() => setMessage(''), 6000)
-      } catch (signError: any) {
-        if (signError.code === 4001) {
-          setMessage('Transaction signature declined')
-        } else {
-          throw signError
-        }
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to submit report')
       }
+      
+      setMessage('Report submitted anonymously! Your identity is protected by zero-knowledge proofs.')
+      logger.info('Report submitted successfully', result.txHash ? { txHash: result.txHash } : {})
+      
+      // Fetch updated total reports from the contract
+      const newTotal = await wallet.contractService.getTotalReports()
+      setTotalReports(Number(newTotal))
+      
+      setTimeout(() => setMessage(''), 6000)
     } catch (error: any) {
-      setMessage(`Failed to submit report: ${error.message || 'Unknown error'}`)
+      if (error.message?.includes('User rejected') || error.message?.includes('declined')) {
+        setMessage('Transaction signature declined')
+      } else {
+        setMessage(`Failed to submit report: ${error.message || 'Unknown error'}`)
+      }
       logger.error('Submission error:', error)
     } finally {
       setIsSubmitting(false)

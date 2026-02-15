@@ -14,6 +14,7 @@
   "scripts": {
     "compile": "compact compile src/counter.compact src/managed/counter",
     "compile:voting": "compact compile src/voting.compact src/managed/voting",
+    "compile:report": "compact compile src/stalking-report-registry.compact src/managed/stalking-report-registry",
     "build": "tsc",
     "deploy": "node dist/deploy.js",
     "deploy:voting": "node dist/deploy-voting.js"
