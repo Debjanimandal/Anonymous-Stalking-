@@ -22,10 +22,25 @@ interface WalletState {
   provider?: any
 }
 
-// Check if Midnight wallet is available (injected by browser extension)
+// Midnight wallet API types
+interface InitialAPI {
+  name: string
+  apiVersion: string
+  connect: (networkId: string) => Promise<ConnectedAPI>
+  icon?: string
+  rdns?: string
+}
+
+interface ConnectedAPI {
+  getConfiguration: () => Promise<any>
+  getConnectionStatus: () => Promise<any>
+  disconnect: () => Promise<void>
+  [key: string]: any
+}
+
 declare global {
   interface Window {
-    midnight?: any
+    midnight?: { [key: string]: InitialAPI }
   }
 }
 
@@ -62,26 +77,42 @@ function App() {
         return
       }
 
-      setMessage('Connecting to Midnight wallet...')
+      // Get available wallets from window.midnight
+      const availableWallets: InitialAPI[] = []
+      for (const key in window.midnight) {
+        const wallet = window.midnight[key]
+        if (wallet && wallet.name && typeof wallet.connect === 'function') {
+          availableWallets.push(wallet)
+        }
+      }
 
-      // Request wallet connection
-      const accounts = await window.midnight.request({ method: 'eth_requestAccounts' })
-      
-      if (!accounts || accounts.length === 0) {
-        setMessage('Failed to get wallet information')
+      if (availableWallets.length === 0) {
+        setMessage('No Midnight wallet found. Please install the Midnight Lace wallet extension.')
         return
       }
 
-      const walletAddress = accounts[0]
+      setMessage('Connecting to Midnight wallet...')
+      
+      // Use the first available wallet
+      const initialAPI = availableWallets[0]
+      logger.info('Connecting to wallet:', initialAPI.name)
+
+      // Connect to the wallet with network ID
+      const connectedAPI = await initialAPI.connect('undeployed')
+      
+      if (!connectedAPI) {
+        setMessage('Failed to connect to wallet. Connection was rejected.')
+        return
+      }
       
       setWallet({
         isConnected: true,
-        address: walletAddress.slice(0, 10) + '...' + walletAddress.slice(-8),
-        provider: window.midnight
+        address: initialAPI.name,
+        provider: connectedAPI
       })
       
       setMessage('Wallet connected successfully! You can now submit reports.')
-      logger.info('Wallet connected:', walletAddress)
+      logger.info('Wallet connected:', initialAPI.name)
       
     } catch (error: any) {
       setMessage(`Failed to connect wallet: ${error.message || 'User rejected connection'}`)
@@ -89,7 +120,14 @@ function App() {
     }
   }
 
-  const disconnectWallet = () => {
+  const disconnectWallet = async () => {
+    try {
+      if (wallet.provider && typeof wallet.provider.disconnect === 'function') {
+        await wallet.provider.disconnect()
+      }
+    } catch (error) {
+      logger.error('Disconnect error:', error)
+    }
     setWallet({ isConnected: false })
     setMessage('Wallet disconnected')
   }
